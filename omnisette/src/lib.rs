@@ -21,6 +21,21 @@ pub mod remote_anisette_v3;
 #[allow(dead_code)]
 pub struct AnisetteHeaders;
 
+pub(crate) fn verified_client() -> reqwest::ClientBuilder {
+    let builder = reqwest::ClientBuilder::new().http1_title_case_headers();
+    match reqwest::Certificate::from_der(include_bytes!("./apple_root.der")) {
+        Ok(root) => builder.add_root_certificate(root),
+        Err(_) => builder,
+    }
+}
+
+pub(crate) fn is_apple_address(url: &str) -> bool {
+    let Some(rest) = url.strip_prefix("https://") else { return false };
+    let host = rest.split(['/', '?', '#']).next().unwrap_or_default();
+    let host = host.split(':').next().unwrap_or_default().to_ascii_lowercase();
+    !host.contains('@') && (host == "apple.com" || host.ends_with(".apple.com"))
+}
+
 #[allow(dead_code)]
 #[derive(Debug, Error)]
 pub enum AnisetteError {

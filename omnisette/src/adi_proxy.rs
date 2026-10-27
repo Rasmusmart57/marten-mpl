@@ -184,9 +184,11 @@ impl dyn ADIProxy {
 
         debug!("Headers sent: {headers:?}");
 
-        let http_client = ClientBuilder::new()
-            .http1_title_case_headers()
-            .danger_accept_invalid_certs(true) // TODO: pin the apple certificate
+        let mut builder = ClientBuilder::new().http1_title_case_headers();
+        if let Ok(root) = reqwest::Certificate::from_der(include_bytes!("./apple_root.der")) {
+            builder = builder.add_root_certificate(root);
+        }
+        let http_client = builder
             .user_agent(AKD_USER_AGENT)
             .default_headers(headers)
             .build()?;
@@ -217,6 +219,9 @@ impl dyn ADIProxy {
             .unwrap()
             .as_string()
             .unwrap();
+        if !crate::is_apple_address(start_provisioning_url) || !crate::is_apple_address(finish_provisioning_url) {
+            return Err(io::Error::other("provisioning addresses that are not Apple's").into());
+        }
 
         let mut body = plist::Dictionary::new();
         body.insert(

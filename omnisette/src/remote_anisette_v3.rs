@@ -9,7 +9,7 @@ use chrono::{DateTime, SubsecRound, Utc};
 use futures_util::{SinkExt, stream::StreamExt};
 use log::debug;
 use plist::{Data, Dictionary};
-use reqwest::{Client, ClientBuilder, RequestBuilder};
+use reqwest::{Client, RequestBuilder};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use sha2::{Digest, Sha256};
 use std::fmt::Write;
@@ -177,10 +177,7 @@ impl AnisetteData {
 }
 
 fn make_reqwest() -> Result<Client, AnisetteError> {
-    Ok(ClientBuilder::new()
-        .http1_title_case_headers()
-        .danger_accept_invalid_certs(true) // TODO: pin the apple certificate
-        .build()?)
+    Ok(crate::verified_client().build()?)
 }
 
 impl AnisetteClient {
@@ -314,6 +311,9 @@ impl AnisetteClient {
             "Got provisioning urls: {} and {}",
             start_provisioning_url, end_provisioning_url
         );
+        if !crate::is_apple_address(start_provisioning_url) || !crate::is_apple_address(end_provisioning_url) {
+            return Err(AnisetteError::InvalidArgument("provisioning addresses that are not Apple's".to_string()));
+        }
 
         let provision_ws_url =
             format!("{}/v3/provisioning_session", self.url).replace("https://", "wss://");
@@ -496,7 +496,14 @@ impl AnisetteHeadersProvider for RemoteAnisetteProviderV3 {
         let state = self.state.as_mut().unwrap();
         if !state.is_provisioned() {
             client.provision(state).await?;
-            plist::to_file_xml(&config_path, state)?;
+            let mut options = fs::OpenOptions::new();
+            options.write(true).create(true).truncate(true);
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::OpenOptionsExt;
+                options.mode(0o600);
+            }
+            plist::to_writer_xml(options.open(&config_path)?, state)?;
         }
         let data = match client.get_headers(&state).await {
             Ok(data) => data,

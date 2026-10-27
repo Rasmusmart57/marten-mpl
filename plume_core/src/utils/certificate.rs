@@ -123,7 +123,7 @@ impl CertificateIdentity {
                 .unwrap();
                 let key_pem = priv_key.to_pkcs8_pem(Default::default())?.to_string();
 
-                fs::write(&key_path, &key_pem)?;
+                write_private(&key_path, key_pem.as_bytes())?;
                 identity.new = true;
                 [cert_pem.into_bytes(), key_pem.into_bytes()]
             }
@@ -147,7 +147,7 @@ impl CertificateIdentity {
             .unwrap();
             let key_pem = priv_key.to_pkcs8_pem(Default::default())?.to_string();
 
-            fs::write(&key_path, &key_pem)?;
+            write_private(&key_path, key_pem.as_bytes())?;
             identity.new = true;
             [cert_pem.into_bytes(), key_pem.into_bytes()]
         };
@@ -169,6 +169,11 @@ impl CertificateIdentity {
         let dir = path.join("keys").join(team_id);
 
         fs::create_dir_all(&dir)?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(&dir, fs::Permissions::from_mode(0o700))?;
+        }
 
         Ok(dir)
     }
@@ -393,4 +398,17 @@ impl CertificateIdentity {
 
         Ok(())
     }
+}
+
+fn write_private(path: &std::path::Path, bytes: &[u8]) -> std::io::Result<()> {
+    #[cfg(unix)]
+    {
+        use std::io::Write;
+        use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+        let mut file = fs::OpenOptions::new().write(true).create(true).truncate(true).mode(0o600).open(path)?;
+        file.set_permissions(fs::Permissions::from_mode(0o600))?;
+        file.write_all(bytes)
+    }
+    #[cfg(not(unix))]
+    fs::write(path, bytes)
 }
