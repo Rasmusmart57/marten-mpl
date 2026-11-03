@@ -184,6 +184,7 @@ impl dyn ADIProxy {
 
         debug!("Headers sent: {headers:?}");
 
+        // Marten: verified, with Apple's root beside the platform's (`crate::verified_client`, which is the async builder alone).
         let mut builder = ClientBuilder::new().http1_title_case_headers();
         if let Ok(root) = reqwest::Certificate::from_der(include_bytes!("./apple_root.der")) {
             builder = builder.add_root_certificate(root);

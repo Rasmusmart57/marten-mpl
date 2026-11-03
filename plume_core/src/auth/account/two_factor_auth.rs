@@ -151,7 +151,8 @@ impl Account {
             headers.insert("Content-Type", HeaderValue::from_static("application/json"));
             headers.insert("Accept", HeaderValue::from_static("application/json"));
         }
-        headers.insert("User-Agent", HeaderValue::from_static(super::GSA_USER_AGENT));
+        // Marten: "Xcode", as upstream and Impactor 2.7.2 send it (AltSign's identity from 2026-10-13 to 2026-11-03, `GSA_USER_AGENT`).
+        headers.insert("User-Agent", HeaderValue::from_static("Xcode"));
         headers.insert("Accept-Language", HeaderValue::from_static("en-us"));
         headers.append(
             "X-Apple-Identity-Token",

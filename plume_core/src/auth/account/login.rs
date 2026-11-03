@@ -82,6 +82,12 @@ impl Account {
                     }
                 }
                 LoginState::Needs2FAVerification => {
+                    // Marten, as Impactor 2.7.2: a 409 (below) reaches this without the device step, so the numbers are fetched here.
+                    if trusted_phone_numbers.is_empty() {
+                        if let Ok(extras) = _self.get_auth_extras().await {
+                            trusted_phone_numbers = extras.trusted_phone_numbers;
+                        }
+                    }
                     let request = TwoFactorRequest {
                         method: TwoFactorMethod::Device,
                         trusted_phone_numbers: trusted_phone_numbers.clone(),
@@ -195,6 +201,8 @@ impl Account {
             .await;
 
         let res = parse_response(res).await?;
+        // Marten: say which step Apple refused, so a sign-in error points at the start (before the password is used) or at
+        // the proof (the password and its protocol).
         check_error(&res).inspect_err(|e| log::warn!("Apple refused the sign-in's first step: {e:?}"))?;
 
         let salt = res.get("s").unwrap().as_data().unwrap();
@@ -202,6 +210,10 @@ impl Account {
         let iters = res.get("i").unwrap().as_signed_integer().unwrap();
         let c = res.get("c").unwrap().as_string().unwrap();
 
+        // Marten: Apple names the password protocol it wants in "sp". For "s2k_fo" the SHA-256 of the password goes into
+        // PBKDF2 as its lowercase hex text, for "s2k" as raw bytes (AltSign's GSAContext.makeX, Apple's AuthKit). Upstream
+        // always used the raw bytes, so an account Apple asks "s2k_fo" of (seen with Advanced Data Protection on,
+        // 2026-10-13) sent a proof Apple refuses.
         let protocol = res.get("sp").and_then(|v| v.as_string()).unwrap_or("s2k").to_string();
         log::debug!("Apple asked for password protocol {protocol}");
         let digest = Sha256::digest(password.as_bytes());
@@ -271,6 +283,11 @@ impl Account {
                 "secondaryAuth" => Ok(LoginState::NeedsSMS2FA),
                 other => Ok(LoginState::NeedsExtraStep(other.to_string())),
             };
+        }
+
+        // Marten, as Impactor 2.7.2: hsc 409 is Apple waiting for a two-factor code it has already sent, not a finished sign-in.
+        if status.get("hsc").and_then(|v| v.as_signed_integer()) == Some(409) {
+            return Ok(LoginState::Needs2FAVerification);
         }
 
         Ok(LoginState::LoggedIn)

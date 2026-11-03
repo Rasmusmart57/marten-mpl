@@ -197,11 +197,12 @@ impl AnisetteClient {
         &self,
         state: &AnisetteState,
         builder: RequestBuilder,
+        client_info: &str,
     ) -> RequestBuilder {
         let dt: DateTime<Utc> = Utc::now().round_subsecs(0);
 
         builder
-            .header("X-Mme-Client-Info", &self.client_info.client_info)
+            .header("X-Mme-Client-Info", client_info)
             .header("User-Agent", &self.client_info.user_agent)
             .header("Content-Type", "text/x-xml-plist")
             .header("X-Apple-I-MD-LU", encode_hex(&state.md_lu()))
@@ -280,9 +281,12 @@ impl AnisetteClient {
         debug!("Provisioning Anisette");
         let http_client = make_reqwest()?;
         let resp = self
+            // Marten: the URL bag is looked up as a Mac, whatever the server's client says; provisioning then goes as the server's
+            // client (Impactor 2.7.2's LOOKUP_CLIENT_INFO, the same text as `CLIENT_INFO_HEADER`).
             .build_apple_request(
                 &state,
                 http_client.get("https://gsa.apple.com/grandslam/GsService2/lookup"),
+                crate::adi_proxy::CLIENT_INFO_HEADER,
             )
             .send()
             .await?;
@@ -361,7 +365,7 @@ impl AnisetteClient {
                             request: Dictionary::new(),
                         };
                         let resp = self
-                            .build_apple_request(state, http_client.post(start_provisioning_url))
+                            .build_apple_request(state, http_client.post(start_provisioning_url), &self.client_info.client_info)
                             .body(plist_to_string(&body_data)?)
                             .send()
                             .await?;
@@ -399,7 +403,7 @@ impl AnisetteClient {
                             request: Dictionary::from_iter([("cpim", cpim)].into_iter()),
                         };
                         let resp = self
-                            .build_apple_request(state, http_client.post(end_provisioning_url))
+                            .build_apple_request(state, http_client.post(end_provisioning_url), &self.client_info.client_info)
                             .body(plist_to_string(&body_data)?)
                             .send()
                             .await?;
@@ -496,6 +500,8 @@ impl AnisetteHeadersProvider for RemoteAnisetteProviderV3 {
         let state = self.state.as_mut().unwrap();
         if !state.is_provisioned() {
             client.provision(state).await?;
+            // Marten: the machine identity (keychain identifier and adi_pb), this user's alone (Marten's security scan of
+            // 2026-10-26, F53): written with the default mode, it was readable by others.
             let mut options = fs::OpenOptions::new();
             options.write(true).create(true).truncate(true);
             #[cfg(unix)]

@@ -19,6 +19,9 @@ pub enum Error {
     CertificatePemMissing,
     #[error("Certificate error: {0}")]
     Certificate(String),
+    /// Marten, as Impactor 2.7.2: Apple answered a sign-in request with a status that is not 2xx (`auth::account::parse_response`).
+    #[error("HTTP request error {status} attempting to connect to {url}")]
+    GeneralHttpError { url: String, status: u16 },
     #[error("Developer API error {result_code} (HTTP {http_code:?}): {message} [URL: {url}]")]
     DeveloperApi {
         url: String,

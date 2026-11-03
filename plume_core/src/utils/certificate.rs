@@ -169,6 +169,7 @@ impl CertificateIdentity {
         let dir = path.join("keys").join(team_id);
 
         fs::create_dir_all(&dir)?;
+        // Marten: the folder of the signing keys is this user's alone.
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
@@ -400,6 +401,9 @@ impl CertificateIdentity {
     }
 }
 
+// Marten: the development certificate's private key, this user's alone from the moment it exists: written with the default
+// mode, it was readable by others (Marten's security scan of 2026-10-26, F53). Created with mode 0600, and set so if it was
+// there before, then written.
 fn write_private(path: &std::path::Path, bytes: &[u8]) -> std::io::Result<()> {
     #[cfg(unix)]
     {

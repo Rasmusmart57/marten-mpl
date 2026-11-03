@@ -21,6 +21,10 @@ pub mod remote_anisette_v3;
 #[allow(dead_code)]
 pub struct AnisetteHeaders;
 
+// Marten: every request here is verified, against the platform's roots and Apple's own (gsa.apple.com and its provisioning
+// addresses chain to Apple Root CA), as plume_core's own client is. Each client here accepted any certificate, so anyone on the
+// network could act as the anisette server and as Apple's lookup, and read the machine identity sent with every sign-in
+// (Marten's security scan of 2026-10-26, F2).
 pub(crate) fn verified_client() -> reqwest::ClientBuilder {
     let builder = reqwest::ClientBuilder::new().http1_title_case_headers();
     match reqwest::Certificate::from_der(include_bytes!("./apple_root.der")) {
@@ -29,6 +33,7 @@ pub(crate) fn verified_client() -> reqwest::ClientBuilder {
     }
 }
 
+// Marten: a provisioning address from Apple's lookup is used only when it is https on apple.com.
 pub(crate) fn is_apple_address(url: &str) -> bool {
     let Some(rest) = url.strip_prefix("https://") else { return false };
     let host = rest.split(['/', '?', '#']).next().unwrap_or_default();
@@ -72,7 +77,11 @@ pub enum AnisetteError {
 
 pub const DEFAULT_ANISETTE_URL: &str = "https://ani.f1sh.me/";
 
-pub const DEFAULT_ANISETTE_URL_V3: &str = "https://ani.sidestore.app";
+// Marten: jkcoxson's Mac server, as Impactor 2.7.2 (2026-10-24) and iloader 2.4.0 have it. Its /v3/client_info names a Mac
+// (MacBookPro13,3, OS X 10.12.6, akd) and that is what is sent, unchanged. Since 12 October 2026 Apple refused a sign-in whose
+// anisette was made by Android code under a Mac's name (-80045, docs/supporter.md); this server's held for those tools for days
+// (checked daily from 2026-10-26, "Kolla om Apple-inloggningen för sideloading är lagad").
+pub const DEFAULT_ANISETTE_URL_V3: &str = "https://mac-ani.jkcoxson.com";
 
 #[derive(Clone, Debug)]
 pub struct AnisetteConfiguration {
@@ -92,6 +101,8 @@ impl AnisetteConfiguration {
     pub fn new() -> AnisetteConfiguration {
         AnisetteConfiguration {
             anisette_url: DEFAULT_ANISETTE_URL.to_string(),
+            // Marten: the anisette server can be chosen with MARTEN_ANISETTE_URL (upstream has no way to set it). The
+            // default public server answered a sign-in with GSA -80045 on 2026-10-13; Marten may run its own.
             anisette_url_v3: std::env::var("MARTEN_ANISETTE_URL").unwrap_or_else(|_| DEFAULT_ANISETTE_URL_V3.to_string()),
             configuration_path: PathBuf::new(),
             macos_serial: "0".to_string(),

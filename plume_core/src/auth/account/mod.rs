@@ -14,8 +14,21 @@ use crate::Error;
 pub async fn parse_response(
     res: Result<Response, reqwest::Error>,
 ) -> Result<plist::Dictionary, Error> {
-    let res = res?.text().await?;
-    let res: plist::Dictionary = plist::from_bytes(res.as_bytes())?;
+    // Marten, as Impactor 2.7.2: an answer that is not 2xx is said as that, with its status. Apple's 503 page was read as a plist
+    // and failed as "plist error" (Impactor#283, #285), which said nothing of Apple refusing.
+    // Marten: a plist Apple sends with such a status is still read, so its own error code (a wrong password, a locked account)
+    // is not lost.
+    let res = res?;
+    let (status, url) = (res.status(), res.url().to_string());
+    let text = res.text().await?;
+    let res: plist::Dictionary = match plist::from_bytes(text.as_bytes()) {
+        Ok(dict) => dict,
+        Err(_) if !status.is_success() => return Err(Error::GeneralHttpError { url, status: status.as_u16() }),
+        Err(e) => return Err(e.into()),
+    };
+    if !status.is_success() && res.get("Response").is_none() {
+        return Err(Error::GeneralHttpError { url, status: status.as_u16() });
+    }
     let res: plist::Value = res.get("Response").unwrap().to_owned();
     match res {
         plist::Value::Dictionary(dict) => Ok(dict),
@@ -23,7 +36,11 @@ pub async fn parse_response(
     }
 }
 
-pub const GSA_USER_AGENT: &str = "AuthKit/1 (Macintosh; OS X 26.5.2) (com.apple.dt.Xcode/26.0)";
+/// Marten: the identity every GrandSlam (gsa.apple.com) sign-in and token request gives, Impactor 2.7.2's (upstream's own,
+/// macOS 10.14's akd), which goes with the Mac the anisette server names. From 2026-10-13 to 2026-11-03 it was AltSign's
+/// "AuthKit/1 (Macintosh; OS X 26.5.2) (com.apple.dt.Xcode/26.0)", a guess while Apple refused every tool; nothing showed it helped,
+/// and the tools that work again send this.
+pub const GSA_USER_AGENT: &str = "akd/1.0 CFNetwork/978.0.7 Darwin/18.7.0";
 
 pub fn check_error(res: &plist::Dictionary) -> Result<(), Error> {
     let res = match res.get("Status") {
