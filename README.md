@@ -12,3 +12,13 @@ Changed files:
 - `omnisette/src/apple_root.der`: Apple's root certificate, the same file as `plume_core/src/apple_root.der`
 - `plume_core/src/utils/certificate.rs`: the signing key written readable by its owner only, in a folder only its owner can open
 - `Cargo.toml` in both: workspace fields written out so each builds on its own
+
+## ASSRenderer
+
+`ASSRenderer/` is the package that builds the ASS and SSA subtitle library in Marten's Mac, Apple TV, iPhone and iPad apps: libass
+0.17.5 with FreeType, HarfBuzz, FriBidi (LGPL-2.1 or later) and libunibreak, all unmodified, from mpvkit's libass-build 0.17.5,
+linked with one Swift file of Marten's into one dynamic library, `ASSRenderer`. It is here so that anyone can build that library
+again, with a changed FriBidi or any other part, and put it in place of the one in the app. The package's own files are under the
+MIT License (`ASSRenderer/LICENSE`); each library keeps its own licence.
+
+Build it with `swift build -c release` in `ASSRenderer/` (Xcode 26 or newer).
